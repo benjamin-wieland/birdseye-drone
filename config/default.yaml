@@ -1,0 +1,50 @@
+# All tunable parameters for the birdseye-drone stack.
+# Values marked TODO are placeholders - confirm against real hardware
+# before flying.
+
+camera:
+  # Field of view of the mounted camera, in degrees.
+  # TODO: replace with your actual camera's spec sheet values.
+  horizontal_fov_deg: 62.2
+  vertical_fov_deg: 48.8
+  frame_width: 640
+  frame_height: 480
+  # Frames per second to run the detect->command loop at.
+  # Start low (5-10) - detection is the bottleneck on a Pi 4B.
+  loop_rate_hz: 8
+
+altitude:
+  # "fixed" = use a constant assumed altitude (fine for early bench testing
+  #           of the math, NOT fine for real flight).
+  # "rangefinder" = read from a downward-facing rangefinder (not yet wired up).
+  # "baro" = pull altitude from the flight controller via MAVLink.
+  source: fixed
+  fixed_altitude_m: 3.0
+
+detection:
+  # Path to a YOLO model file (.pt). Start with a stock pretrained model
+  # (e.g. yolov8n.pt) and swap in a fine-tuned one once you have a target
+  # class that matters for your mission.
+  model_path: yolov8n.pt
+  # Which class name(s) from the model to treat as "the target".
+  target_classes:
+    - person
+  confidence_threshold: 0.45
+
+controller:
+  # Proportional gain converting a horizontal offset (meters) into a
+  # commanded velocity (m/s). Start small and increase once tuned.
+  kp: 0.6
+  max_speed_mps: 1.0
+  # Once the target is within this many meters of image center (in the
+  # real-world offset, not pixels), consider it "arrived" and stop.
+  arrival_radius_m: 0.5
+
+mavlink:
+  # Serial connection to the flight controller from the Pi.
+  # e.g. /dev/serial0 for the Pi's GPIO UART, or a USB adapter path.
+  connection: /dev/serial0
+  baud: 921600
+  # Body-frame velocity commands: forward/right relative to the drone's
+  # current heading, so no compass/yaw math needed on this end.
+  frame: MAV_FRAME_BODY_OFFSET_NED

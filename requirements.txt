@@ -1,0 +1,9 @@
+numpy
+opencv-python
+pyyaml
+pymavlink
+ultralytics
+pytest
+
+# picamera2 is not installed via pip - it ships with Raspberry Pi OS.
+# On the Pi itself: sudo apt install python3-picamera2
