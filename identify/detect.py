@@ -16,7 +16,9 @@ import numpy as np
 import cv2
 
 from picamera2 import Picamera2
-from tflite_runtime.interpreter import Interpreter
+from ai_edge_litert.interpreter import Interpreter
+
+from mavlink_bridge import MavlinkBridge, centroid_to_velocity
 
 # ---------------------------------------------------------------------------
 # Config
@@ -106,10 +108,17 @@ def draw_and_report(frame, boxes, classes, scores, count, labels, threshold):
     return frame, detections
 
 
-def main(show_preview=True, headless=False):
+def main(show_preview=True, headless=False, enable_mavlink=False,
+         mavlink_connection="udp:127.0.0.1:14550", mavlink_dry_run=True,
+         track_label="person"):
     labels = load_labels(LABELS_PATH)
     interpreter = setup_interpreter(MODEL_PATH)
     picam2 = setup_camera()
+
+    bridge = None
+    if enable_mavlink:
+        bridge = MavlinkBridge(connection_string=mavlink_connection, dry_run=mavlink_dry_run)
+        bridge.connect()
 
     print("Starting detection loop. Ctrl+C to stop.")
     try:
@@ -124,6 +133,15 @@ def main(show_preview=True, headless=False):
                 print(f"[{time.strftime('%H:%M:%S')}] {d['label']} "
                       f"({d['confidence']:.2f}) centroid={d['centroid']}")
 
+            if bridge:
+                # Track the first detection matching track_label, if any.
+                target = next((d for d in detections if d["label"] == track_label), None)
+                if target:
+                    cx, cy = target["centroid"]
+                    h, w, _ = frame.shape
+                    vx, vy, vz = centroid_to_velocity(cx, cy, w, h)
+                    bridge.send_velocity_command(vx, vy, vz)
+
             if show_preview and not headless:
                 cv2.imshow("Detections", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
                 if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -133,6 +151,8 @@ def main(show_preview=True, headless=False):
         print("\nStopping.")
     finally:
         picam2.stop()
+        if bridge:
+            bridge.close()
         if show_preview and not headless:
             cv2.destroyAllWindows()
 
@@ -143,5 +163,30 @@ if __name__ == "__main__":
         "--headless", action="store_true",
         help="Run without a display window (e.g. over SSH with no X forwarding)."
     )
+    parser.add_argument(
+        "--mavlink", action="store_true",
+        help="Enable MAVLink integration (defaults to dry-run/print mode)."
+    )
+    parser.add_argument(
+        "--mavlink-connection", default="udp:127.0.0.1:14550",
+        help="MAVLink connection string. Use udp:127.0.0.1:14550 for SITL, "
+             "or /dev/serial0 for a wired Pixhawk connection."
+    )
+    parser.add_argument(
+        "--mavlink-live", action="store_true",
+        help="DANGER: actually send commands to the flight controller "
+             "instead of printing them. Only use after SITL testing, "
+             "and with props off for first hardware tests."
+    )
+    parser.add_argument(
+        "--track-label", default="person",
+        help="COCO class label to track and send velocity commands toward."
+    )
     args = parser.parse_args()
-    main(headless=args.headless)
+    main(
+        headless=args.headless,
+        enable_mavlink=args.mavlink,
+        mavlink_connection=args.mavlink_connection,
+        mavlink_dry_run=not args.mavlink_live,
+        track_label=args.track_label,
+    )
