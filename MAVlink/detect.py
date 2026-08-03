@@ -16,7 +16,7 @@ import numpy as np
 import cv2
 
 from picamera2 import Picamera2
-from tflite_runtime.interpreter import Interpreter
+from ai_edge_litert.interpreter import Interpreter
 
 from mavlink_bridge import MavlinkBridge, centroid_to_velocity
 
